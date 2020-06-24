@@ -7,6 +7,12 @@ import matplotlib.image as mpimg
 import pandas as pd
 import cv2
 
+# Added libraries for rotation transform class
+import math
+import PIL
+from torchvision import transforms, utils
+
+
 
 class FacialKeypointsDataset(Dataset):
     """Face Landmarks dataset."""
@@ -59,7 +65,9 @@ class Normalize(object):
         key_pts_copy = np.copy(key_pts)
 
         # convert image to grayscale
-        image_copy = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        
+        # adding np.asarray to image, giving error: src is not a numpy array, neither a scalar
+        image_copy = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2GRAY)
         
         # scale color range from [0, 255] to [0, 1]
         image_copy=  image_copy/255.0
@@ -135,8 +143,8 @@ class RandomCrop(object):
 
         image = image[top: top + new_h,
                       left: left + new_w]
-
-        key_pts = key_pts - [left, top]
+        
+        key_pts = key_pts - torch.Tensor([left, top]).double() # fixing it
 
         return {'image': image, 'keypoints': key_pts}
 
@@ -158,4 +166,53 @@ class ToTensor(object):
         image = image.transpose((2, 0, 1))
         
         return {'image': torch.from_numpy(image),
+                'keypoints': torch.from_numpy(key_pts)}
+
+    
+####### added class for rotation from CENTER #########
+class RandomRotate(object):
+    """Perform Randomrotation based on image center"""
+    def __init__(self, degree):
+        if 0 <= degree <= 180:
+            self.degree = degree
+        else:
+            print('class RandomRotate:: Notebook1:: Degree argument is not within 0-180!')
+            raise
+    
+    @staticmethod
+    def _get_params(angle):
+        # np use radian
+        return np.random.uniform(-angle, angle, (1,)).item()*math.pi/180
+            
+            
+    def __call__(self, sample):
+        
+        angle = self._get_params(self.degree)
+       
+        image, key_pts = sample['image'], sample['keypoints']
+        image_center = [int(image.shape[0]/2), int(image.shape[1]/2)]
+        
+        # PIL rotation angle is in degree
+        image = transforms.functional.rotate(PIL.Image.fromarray(np.array(image)), angle*180/math.pi,  center=image_center)
+        
+        # Getting rotation matrix from original cartesian coordinate
+        if isinstance(sample['keypoints'], torch.Tensor):
+            key_pts = sample['keypoints'].numpy() - image_center
+        else:
+            key_pts = sample['keypoints'] - image_center
+        init_angle = np.arctan2(key_pts[:,0], key_pts[:,1])
+        rot_mat = np.array([[np.sin(init_angle + angle), np.cos(init_angle + angle)]])
+        rot_mat = rot_mat.squeeze(0).T
+        
+        # Getting new cartesian coordinate
+        key_pts = np.sqrt(key_pts[:,0]**2 + key_pts[:,1]**2)
+        key_pts = key_pts.reshape((len(key_pts), 1))
+        key_pts = np.concatenate((key_pts, key_pts), axis=1)
+        key_pts = np.multiply(key_pts, rot_mat)
+        key_pts = key_pts + image_center
+        
+        assert key_pts.shape[0] == sample['keypoints'].shape[0]
+        assert key_pts.shape[1] == sample['keypoints'].shape[1]
+        
+        return {'image': torch.from_numpy(np.array(image)),
                 'keypoints': torch.from_numpy(key_pts)}
