@@ -7,7 +7,6 @@ import matplotlib.image as mpimg
 import pandas as pd
 import cv2
 
-# Added libraries for rotation transform class
 import math
 import PIL
 from torchvision import transforms, utils
