@@ -2,6 +2,9 @@
   "notebooks": {
     "1. Load and Visualize Data.ipynb": {
       "slug": "25aa38f029e7485c91d0def7519c9dbd"
+    },
+    "2. Define the Network Architecture.ipynb": {
+      "slug": "8875961f6363425dbf2546d195496d16"
     }
   }
 }
